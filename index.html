@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Three.js GLB + FPS Controls</title>
+  <title>Blaha pince LIDAR</title>
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #000; touch-action: none; }
     #overlay {
@@ -85,7 +85,7 @@
 
   <div id="overlay">
     <div style="text-align:center; max-width: 520px; padding: 20px;">
-      <h2 id="overlay-title" style="margin:0 0 8px;">Click to Play</h2>
+      <h2 id="overlay-title" style="margin:0 0 8px;">Click to start</h2>
       <div id="overlay-instructions">WASD to move | Mouse to look | Space up | Shift down | Esc to unlock</div>
     </div>
   </div>
@@ -178,7 +178,7 @@
     setLoadingProgress(0);
 
     if (isTouch) {
-      overlayTitle.textContent = "Tap to Start";
+      overlayTitle.textContent = "Tap to start";
       overlayInstructions.textContent = "Drag to look | Left thumb to move | Up/Down buttons";
       hud.innerHTML = `
         <div><b>Controls</b></div>
