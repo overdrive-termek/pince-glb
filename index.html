@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Three.js GLB + FPS Controls</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #000; touch-action: none; }
+    #overlay {
+      position: fixed; inset: 0;
+      display: grid; place-items: center;
+      color: white; font: 16px/1.4 system-ui, sans-serif;
+      background: rgba(0,0,0,0.55);
+      cursor: pointer;
+      user-select: none;
+      z-index: 5;
+    }
+    #hud {
+      position: fixed; left: 12px; top: 12px;
+      color: white; font: 14px system-ui, sans-serif;
+      background: rgba(0,0,0,0.35);
+      padding: 8px 10px; border-radius: 8px;
+      pointer-events: none;
+      z-index: 6;
+    }
+    #touch-ui {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 7;
+      display: none;
+    }
+    #stick-base {
+      position: fixed; left: 20px; bottom: 20px;
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.2);
+      pointer-events: auto;
+      touch-action: none;
+    }
+    #stick-knob {
+      position: absolute; left: 50%; top: 50%;
+      width: 52px; height: 52px;
+      margin-left: -26px; margin-top: -26px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.22);
+      border: 1px solid rgba(255,255,255,0.28);
+      transform: translate(0, 0);
+    }
+    #touch-buttons {
+      position: fixed; right: 20px; bottom: 20px;
+      display: flex; flex-direction: column; gap: 10px;
+      pointer-events: auto;
+    }
+    #touch-buttons button {
+      width: 72px; height: 48px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08);
+      color: white;
+      font: 14px system-ui, sans-serif;
+    }
+    #loading {
+      position: fixed; inset: 0;
+      display: grid; place-items: center;
+      color: white; font: 16px/1.4 system-ui, sans-serif;
+      background: rgba(0,0,0,0.7);
+      z-index: 10;
+    }
+    a { color: #9cf; }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="loading">
+    <div id="loading-text">Loading pince.glb (0%)</div>
+  </div>
+
+  <div id="overlay">
+    <div style="text-align:center; max-width: 520px; padding: 20px;">
+      <h2 id="overlay-title" style="margin:0 0 8px;">Click to Play</h2>
+      <div id="overlay-instructions">WASD to move | Mouse to look | Space up | Shift down | Esc to unlock</div>
+    </div>
+  </div>
+
+  <div id="hud">
+    <div><b>Controls</b></div>
+    <div>W/A/S/D: move</div>
+    <div>Mouse: look</div>
+    <div>Space: up</div>
+    <div>Shift: down</div>
+    <div>Esc: release mouse</div>
+  </div>
+  <div id="touch-ui">
+    <div id="stick-base"><div id="stick-knob"></div></div>
+    <div id="touch-buttons">
+      <button id="btn-up" type="button">Up</button>
+      <button id="btn-down" type="button">Down</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+    import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
+
+    // --- Basic scene ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x101014);
+
+    const camera = new THREE.PerspectiveCamera(
+      75, window.innerWidth / window.innerHeight, 0.05, 2000
+    );
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+    renderer.domElement.style.touchAction = "none";
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+    dir.position.set(5, 10, 3);
+    scene.add(dir);
+
+    // Optional ground (helps with orientation)
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshStandardMaterial({ color: 0x202028, roughness: 1, metalness: 0 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = 0;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // --- FPS Controls (Pointer Lock) ---
+    const isTouch = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+    const usePointerLock = !isTouch && "pointerLockElement" in document;
+    const controls = new PointerLockControls(camera, document.body);
+    const startPos = new THREE.Vector3(20.826697470798745, 1.7, 6.288183059661561);
+    const startRot = new THREE.Euler(0, 2.356194490192345, 0, "YXZ");
+    const player = controls.getObject();
+    player.position.copy(startPos);
+    camera.rotation.set(startRot.x, startRot.y, startRot.z, "YXZ");
+    scene.add(player);
+
+    const overlay = document.getElementById("overlay");
+    const overlayTitle = document.getElementById("overlay-title");
+    const overlayInstructions = document.getElementById("overlay-instructions");
+    const hud = document.getElementById("hud");
+    const loading = document.getElementById("loading");
+    const loadingText = document.getElementById("loading-text");
+    const touchUI = document.getElementById("touch-ui");
+    const stickBase = document.getElementById("stick-base");
+    const stickKnob = document.getElementById("stick-knob");
+    const btnUp = document.getElementById("btn-up");
+    const btnDown = document.getElementById("btn-down");
+    let inputEnabled = false;
+    let modelLoaded = false;
+
+    overlay.style.display = "none";
+
+    const setLoadingProgress = (ratio) => {
+      const pct = Math.max(0, Math.min(1, ratio));
+      loadingText.textContent = `Loading pince.glb (${Math.round(pct * 100)}%)`;
+    };
+
+    setLoadingProgress(0);
+
+    if (isTouch) {
+      overlayTitle.textContent = "Tap to Start";
+      overlayInstructions.textContent = "Drag to look | Left thumb to move | Up/Down buttons";
+      hud.innerHTML = `
+        <div><b>Controls</b></div>
+        <div>Drag: look</div>
+        <div>Stick: move</div>
+        <div>Up/Down: fly</div>
+      `;
+    }
+
+    overlay.addEventListener("click", () => {
+      if (!modelLoaded) return;
+      if (usePointerLock) {
+        controls.lock();
+      } else {
+        inputEnabled = true;
+        overlay.style.display = "none";
+        touchUI.style.display = "block";
+      }
+    });
+
+    controls.addEventListener("lock", () => {
+      inputEnabled = true;
+      overlay.style.display = "none";
+    });
+    controls.addEventListener("unlock", () => {
+      inputEnabled = false;
+      if (modelLoaded) overlay.style.display = "grid";
+    });
+
+    // Movement state
+    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false };
+    window.addEventListener("keydown", (e) => {
+      if (e.code === "KeyW") keys.w = true;
+      if (e.code === "KeyA") keys.a = true;
+      if (e.code === "KeyS") keys.s = true;
+      if (e.code === "KeyD") keys.d = true;
+      if (e.code === "Space") keys.space = true;
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") keys.shift = true;
+    });
+    window.addEventListener("keyup", (e) => {
+      if (e.code === "KeyW") keys.w = false;
+      if (e.code === "KeyA") keys.a = false;
+      if (e.code === "KeyS") keys.s = false;
+      if (e.code === "KeyD") keys.d = false;
+      if (e.code === "Space") keys.space = false;
+      if (e.code === "ShiftLeft" || e.code === "ShiftRight") keys.shift = false;
+    });
+
+    const touchMove = { x: 0, y: 0 };
+    let touchUp = false;
+    let touchDown = false;
+    let touchYaw = startRot.y;
+    let touchPitch = startRot.x;
+
+    if (isTouch) {
+      const lookSpeed = 0.0025;
+      const lookState = { active: false, id: null, lastX: 0, lastY: 0 };
+
+      renderer.domElement.addEventListener("pointerdown", (e) => {
+        if (!inputEnabled || e.target.closest("#touch-ui")) return;
+        lookState.active = true;
+        lookState.id = e.pointerId;
+        lookState.lastX = e.clientX;
+        lookState.lastY = e.clientY;
+        renderer.domElement.setPointerCapture(e.pointerId);
+      });
+      renderer.domElement.addEventListener("pointermove", (e) => {
+        if (!lookState.active || e.pointerId !== lookState.id) return;
+        const dx = e.clientX - lookState.lastX;
+        const dy = e.clientY - lookState.lastY;
+        lookState.lastX = e.clientX;
+        lookState.lastY = e.clientY;
+        touchYaw -= dx * lookSpeed;
+        touchPitch -= dy * lookSpeed;
+        touchPitch = Math.max(-1.4, Math.min(1.4, touchPitch));
+        camera.rotation.set(touchPitch, touchYaw, 0, "YXZ");
+      });
+      const endLook = (e) => {
+        if (e.pointerId !== lookState.id) return;
+        lookState.active = false;
+        lookState.id = null;
+      };
+      renderer.domElement.addEventListener("pointerup", endLook);
+      renderer.domElement.addEventListener("pointercancel", endLook);
+
+      let stickId = null;
+      let stickCenter = { x: 0, y: 0 };
+      let stickRadius = 40;
+
+      const resetStick = () => {
+        touchMove.x = 0;
+        touchMove.y = 0;
+        stickKnob.style.transform = "translate(0, 0)";
+      };
+
+      const updateStick = (clientX, clientY) => {
+        let dx = clientX - stickCenter.x;
+        let dy = clientY - stickCenter.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > stickRadius) {
+          dx = (dx / dist) * stickRadius;
+          dy = (dy / dist) * stickRadius;
+        }
+        stickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+        touchMove.x = dx / stickRadius;
+        touchMove.y = -dy / stickRadius;
+      };
+
+      stickBase.addEventListener("pointerdown", (e) => {
+        if (!inputEnabled) return;
+        stickId = e.pointerId;
+        stickBase.setPointerCapture(e.pointerId);
+        const rect = stickBase.getBoundingClientRect();
+        stickCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        stickRadius = rect.width / 2 - 12;
+        updateStick(e.clientX, e.clientY);
+        e.preventDefault();
+      });
+      stickBase.addEventListener("pointermove", (e) => {
+        if (e.pointerId !== stickId) return;
+        updateStick(e.clientX, e.clientY);
+      });
+      const endStick = (e) => {
+        if (e.pointerId !== stickId) return;
+        stickId = null;
+        resetStick();
+      };
+      stickBase.addEventListener("pointerup", endStick);
+      stickBase.addEventListener("pointercancel", endStick);
+
+      const pressButton = (setter) => (e) => {
+        if (!inputEnabled) return;
+        setter(true);
+        e.preventDefault();
+      };
+      const releaseButton = (setter) => (e) => {
+        setter(false);
+        e.preventDefault();
+      };
+      btnUp.addEventListener("pointerdown", pressButton((v) => touchUp = v));
+      btnUp.addEventListener("pointerup", releaseButton((v) => touchUp = v));
+      btnUp.addEventListener("pointercancel", releaseButton((v) => touchUp = v));
+      btnDown.addEventListener("pointerdown", pressButton((v) => touchDown = v));
+      btnDown.addEventListener("pointerup", releaseButton((v) => touchDown = v));
+      btnDown.addEventListener("pointercancel", releaseButton((v) => touchDown = v));
+    }
+
+    const clock = new THREE.Clock();
+    const direction = new THREE.Vector3();
+    const speedDesktop = 2.0; // m/s
+    const speedMobile = 3.0; // m/s
+    const speed = isTouch ? speedMobile : speedDesktop;
+
+    // --- Load GLB ---
+    const loader = new GLTFLoader();
+    loader.load(
+      "./pince.glb",
+      (gltf) => {
+        const model = gltf.scene;
+        scene.add(model);
+
+        // Center model and place it on ground (best-effort)
+        const box = new THREE.Box3().setFromObject(model);
+        const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
+        box.getSize(size);
+        box.getCenter(center);
+
+        model.position.sub(center); // center at origin
+        model.position.y += size.y * 0.5; // lift so its bottom touches y=0 approximately
+
+        modelLoaded = true;
+        loading.style.display = "none";
+        overlay.style.display = "grid";
+      },
+      (xhr) => {
+        if (xhr.total) {
+          setLoadingProgress(xhr.loaded / xhr.total);
+        } else {
+          loadingText.textContent = "Loading...";
+        }
+      },
+      () => {
+        inputEnabled = false;
+        touchUI.style.display = "none";
+        loading.style.display = "none";
+        overlay.style.display = "grid";
+        overlay.innerHTML = `
+          <div style="text-align:center; max-width: 620px; padding: 20px;">
+            <h2 style="margin:0 0 8px;">Couldn't load pince.glb</h2>
+            <div style="opacity:.9">
+              Make sure <code>pince.glb</code> is available at <code>./pince.glb</code>.
+            </div>
+            <div style="opacity:.85; margin-top:10px;">
+              Reload the page after fixing the asset path.
+            </div>
+          </div>`;
+      }
+    );
+
+    // --- Resize handling ---
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- Animation loop ---
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const dt = Math.min(clock.getDelta(), 0.05); // avoid huge jumps
+
+      const canMove = usePointerLock ? controls.isLocked : inputEnabled;
+      if (canMove) {
+        direction.set(0, 0, 0);
+        if (keys.w) direction.z -= 1;
+        if (keys.s) direction.z += 1;
+        if (keys.a) direction.x -= 1;
+        if (keys.d) direction.x += 1;
+        direction.x += touchMove.x;
+        direction.z -= touchMove.y;
+        const lenSq = direction.lengthSq();
+        if (lenSq > 1) direction.normalize();
+
+        // Move relative to camera orientation
+        // PointerLockControls exposes moveForward/moveRight
+        const move = speed * dt;
+        if (direction.z !== 0) controls.moveForward(-direction.z * move);
+        if (direction.x !== 0) controls.moveRight(direction.x * move);
+
+        // Simple vertical movement (fly mode)
+        if (keys.space || touchUp) controls.getObject().position.y += move;
+        if (keys.shift || touchDown) controls.getObject().position.y -= move;
+
+        // Keep "floor" at y=1.7 minimum (optional)
+        controls.getObject().position.y = Math.max(1.7, controls.getObject().position.y);
+      }
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
+
+
+
+
