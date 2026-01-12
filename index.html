@@ -251,8 +251,8 @@
         const dy = e.clientY - lookState.lastY;
         lookState.lastX = e.clientX;
         lookState.lastY = e.clientY;
-        touchYaw -= dx * lookSpeed;
-        touchPitch -= dy * lookSpeed;
+        touchYaw += dx * lookSpeed;
+        touchPitch += dy * lookSpeed;
         touchPitch = Math.max(-1.4, Math.min(1.4, touchPitch));
         camera.rotation.set(touchPitch, touchYaw, 0, "YXZ");
       });
