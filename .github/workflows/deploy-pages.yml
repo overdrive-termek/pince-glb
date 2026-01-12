@@ -29,7 +29,7 @@ jobs:
       - name: Prepare site
         run: |
           mkdir -p _site
-          cp -r index.html pince.glb _site/
+          cp -r index.html pince.glb pince_sm.glb _site/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
@@ -39,3 +39,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
