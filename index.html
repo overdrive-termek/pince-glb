@@ -80,7 +80,7 @@
 </head>
 <body>
   <div id="loading">
-    <div id="loading-text">Loading pince.glb (0%)</div>
+    <div id="loading-text">Loading (0%)</div>
   </div>
 
   <div id="overlay">
@@ -109,6 +109,7 @@
   <script type="module">
     import * as THREE from "three";
     import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+    import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
     import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 
     // --- Basic scene ---
@@ -171,7 +172,7 @@
 
     const setLoadingProgress = (ratio) => {
       const pct = Math.max(0, Math.min(1, ratio));
-      loadingText.textContent = `Loading pince.glb (${Math.round(pct * 100)}%)`;
+      loadingText.textContent = `Loading (${Math.round(pct * 100)}%)`;
     };
 
     setLoadingProgress(0);
@@ -333,8 +334,10 @@
 
     // --- Load GLB ---
     const loader = new GLTFLoader();
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    const modelPath = isTouch ? "./pince_sm.glb" : "./pince.glb";
     loader.load(
-      "./pince.glb",
+      modelPath,
       (gltf) => {
         const model = gltf.scene;
         scene.add(model);
@@ -367,13 +370,7 @@
         overlay.style.display = "grid";
         overlay.innerHTML = `
           <div style="text-align:center; max-width: 620px; padding: 20px;">
-            <h2 style="margin:0 0 8px;">Couldn't load pince.glb</h2>
-            <div style="opacity:.9">
-              Make sure <code>pince.glb</code> is available at <code>./pince.glb</code>.
-            </div>
-            <div style="opacity:.85; margin-top:10px;">
-              Reload the page after fixing the asset path.
-            </div>
+            <h2 style="margin:0 0 8px;">Couldn't load model</h2>
           </div>`;
       }
     );
